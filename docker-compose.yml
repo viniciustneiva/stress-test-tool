@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  stress-test:
+    build: .
+    environment:
+      - STRESS_URL: http://localhost:8080/ping
+      - STRESS_METHOD: GET
+      - STRESS_REQUESTS: 100
+      - STRESS_CONCURRENCY: 10
+      - STRESS_HEADERS_JSON: {"Content-Type": "application/json"}
+      - STRESS_BODY_JSON: {"key": "value"}
+    # Uncomment and adjust if you want to mount files instead
+    # volumes:
+    #   - ./header.json:/app/header.json
+    #   - ./body.json:/app/body.json

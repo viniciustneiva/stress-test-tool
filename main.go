@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"flag"
+	"strconv"
 	"fmt"
 	"io"
 	"net/http"
@@ -16,8 +16,8 @@ import (
 type Config struct {
 	URL         string
 	Method      string
-	HeaderFile  string
-	BodyFile    string
+	HeaderJSON  string
+	BodyJSON    string
 	Requests    int
 	Concurrency int
 }
@@ -32,20 +32,15 @@ type Results struct {
 	MaxDuration     time.Duration
 }
 
-func loadJSONFile(filePath string) (map[string]any, error) {
-	if filePath == "" {
+func loadJSON(jsonStr string) (map[string]any, error) {
+	if jsonStr == "" {
 		return map[string]any{}, nil
 	}
 
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return nil, fmt.Errorf("erro ao ler arquivo %s: %v", filePath, err)
-	}
-
 	var result map[string]any
-	err = json.Unmarshal(data, &result)
+	err := json.Unmarshal([]byte(jsonStr), &result)
 	if err != nil {
-		return nil, fmt.Errorf("erro ao fazer parse do JSON em %s: %v", filePath, err)
+		return nil, fmt.Errorf("erro ao fazer parse do JSON: %v", err)
 	}
 
 	return result, nil
@@ -163,34 +158,38 @@ func printResults(results Results) {
 	fmt.Printf("Taxa de sucesso: %.2f%%\n", float64(results.SuccessRequests)/float64(results.TotalRequests)*100)
 }
 
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
 func main() {
 	config := Config{}
-	config.URL = "http://localhost:8080/ping"
-	config.Method = "GET"
+	config.URL = getEnvOrDefault("STRESS_URL", "http://localhost:8080/ping")
+	config.Method = getEnvOrDefault("STRESS_METHOD", "GET")
+	config.HeaderJSON = os.Getenv("STRESS_HEADERS_JSON")
+	config.BodyJSON = os.Getenv("STRESS_BODY_JSON")
 
+	requestsStr := getEnvOrDefault("STRESS_REQUESTS", "100")
+	config.Requests, _ = strconv.Atoi(requestsStr)
 
-	flag.StringVar(&config.URL, "url", "", "URL para fazer stress test (obrigatório)")
-	flag.StringVar(&config.Method, "method", "GET", "Método HTTP (GET, POST, PUT, DELETE, etc)")
-	flag.StringVar(&config.HeaderFile, "headers", "", "Arquivo JSON com headers")
-	flag.StringVar(&config.BodyFile, "body", "", "Arquivo JSON com body da requisição")
-	flag.IntVar(&config.Requests, "requests", 100, "Número de requisições")
-	flag.IntVar(&config.Concurrency, "concurrency", 10, "Número de requisições concorrentes")
-
-	flag.Parse()
+	concurrencyStr := getEnvOrDefault("STRESS_CONCURRENCY", "10")
+	config.Concurrency, _ = strconv.Atoi(concurrencyStr)
 
 	if config.URL == "" {
-		fmt.Println("Erro: -url é obrigatório")
-		flag.PrintDefaults()
+		fmt.Println("Erro: STRESS_URL é obrigatório")
 		os.Exit(1)
 	}
 
-	headers, err := loadJSONFile(config.HeaderFile)
+	headers, err := loadJSON(config.HeaderJSON)
 	if err != nil {
 		fmt.Printf("Erro ao carregar headers: %v\n", err)
 		os.Exit(1)
 	}
 
-	body, err := loadJSONFile(config.BodyFile)
+	body, err := loadJSON(config.BodyJSON)
 	if err != nil {
 		fmt.Printf("Erro ao carregar body: %v\n", err)
 		os.Exit(1)
